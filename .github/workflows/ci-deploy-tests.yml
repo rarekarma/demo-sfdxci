@@ -1,0 +1,81 @@
+name: CI — deploy components and run Apex tests
+
+on:
+  push:
+    branches:
+      - main
+      - ci/**
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install Salesforce CLI
+        run: |
+          # Use the supported npm installer for GitHub Actions runners
+          npm install -g @salesforce/cli
+
+      - name: Decode SF JWT key
+        env:
+          SFDXCI_JWT_KEY_BASE64: ${{ secrets.SFDXCI_JWT_KEY_BASE64 }}
+        run: |
+          echo "$SFDXCI_JWT_KEY_BASE64" | base64 --decode > /tmp/server.key
+          chmod 600 /tmp/server.key
+
+      - name: Auth to Dev Hub
+        env:
+          SFDXCI_CLIENTID: ${{ secrets.SFDXCI_CLIENTID }}
+          SFDXCI_USER: ${{ secrets.SFDXCI_USER }}
+        run: |
+          sf auth jwt grant \
+            --client-id "$SFDXCI_CLIENTID" \
+            --jwt-key-file /tmp/server.key \
+            --username "$SFDXCI_USER" \
+            --instance-url https://login.salesforce.com \
+            --set-default-dev-hub
+
+      - name: Create scratch org
+        id: create_scratch
+        run: |
+          sf org create scratch \
+            --definition-file config/project-scratch-def.json \
+            --duration-days 1 \
+            --alias ci-scratch
+
+      - name: Deploy components
+        env:
+          ORG: ci-scratch
+        run: |
+          sf project deploy start \
+            --target-org ci-scratch \
+            --wait 10
+
+      - name: Run Apex tests
+        run: |
+          sf apex test run --target-org ci-scratch \
+            --wait 10 \
+            --json > /tmp/apex-tests.json
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex-test-results
+          path: /tmp/apex-tests.json
+
+      - name: Delete scratch org
+        if: always()
+        run: |
+          sf org delete scratch --target-org ci-scratch --no-prompt || true
