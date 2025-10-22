@@ -4,8 +4,8 @@ trigger OrderTrigger on Order (after insert) {
     for (Order o : Trigger.new) {
         logs.add(
             new EventLog__c(
-                Name = 'NewOrder-' + (o.OrderId == null ? '' : o.OrderId),
-                OrderId__c = o.OrderId
+                Name = 'NewOrder-' + (o.Id == null ? '' : o.Id),
+                OrderId__c = o.Id
             )
         );
     }
