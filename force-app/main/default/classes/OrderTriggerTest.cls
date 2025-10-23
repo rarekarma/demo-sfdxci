@@ -2,7 +2,7 @@
 private class OrderTriggerTest {
     @isTest
     static void testInsert() {
-        Account a = new Account(Name = 'TestAcct');
+        Account a = new Account(Name = 'TestAcct01');
         insert a;
 
         Order o = new Order(
